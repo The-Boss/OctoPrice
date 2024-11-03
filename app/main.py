@@ -34,8 +34,8 @@ def fetch_energy_data():
     """Gets Octo data from now through to the latest available in the future."""    
     print("fetching data...")
     global energy_data
-    # params = {"period_from": datetime.now().isoformat()}
-    params = {"period_from": "2024-11-02T21:00:00Z"}
+    params = {"period_from": datetime.now().isoformat()}
+    # params = {"period_from": "2024-11-02T21:00:00Z"}
     try:
         response = requests.get(OCTOPUS_API_URL, params=params)
         response.raise_for_status()
