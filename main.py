@@ -1,8 +1,7 @@
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from datetime import datetime, timedelta
-from pytz import utc
+from datetime import datetime
 import requests
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -15,8 +14,6 @@ OCTOPUS_API_URL = "https://api.octopus.energy/v1/products/AGILE-24-10-01/electri
 threshold_high = 22.0
 threshold_medium = 17.0
 threshold_low = 12.0
-
-# Store for the fetched data
 
 
 
@@ -53,10 +50,10 @@ def fetch_energy_data():
 def retrieve_current_data() -> dict:
     """"""
     time = datetime.now()
-    
     while True:
-        if ((datetime.strptime(energy_data[-1]["valid_from"].replace("Z",""), "%Y-%m-%dT%H:%M:%S") < time) and datetime.strptime(energy_data[-1]["valid_to"].replace("Z",""), "%Y-%m-%dT%H:%M:%S") > time):
-        # Have the right prive point - return it
+        if ((datetime.strptime(energy_data[-1]["valid_from"].replace("Z",""), "%Y-%m-%dT%H:%M:%S") < time) 
+            and datetime.strptime(energy_data[-1]["valid_to"].replace("Z",""), "%Y-%m-%dT%H:%M:%S") > time):
+            # Have the right price point - return it
             return energy_data[-1]
         elif (datetime.strptime(energy_data[-1]["valid_to"].replace("Z",""), "%Y-%m-%dT%H:%M:%S") < time):
             energy_data.pop()
@@ -100,21 +97,6 @@ async def read_root():
         return price_dict
     else:
         return None
-
-    # time = datetime.now()
-    
-    # while True:
-    #     if ((datetime.strptime(energy_data[-1]["valid_from"].replace("Z",""), "%Y-%m-%dT%H:%M:%S") < time) and datetime.strptime(energy_data[-1]["valid_to"].replace("Z",""), "%Y-%m-%dT%H:%M:%S") > time):
-    #     # Have the right prive point - return it
-    #         return energy_data[-1]
-    #     elif (datetime.strptime(energy_data[-1]["valid_to"].replace("Z",""), "%Y-%m-%dT%H:%M:%S") < time):
-    #         energy_data.pop()
-    #         print("removed value")
-    #     else:
-    #         return {"key":"Error"}
-
-    # return energy_data[-1]
-    # return {"colour":"blue"}
 
 @app.get("/colour")
 async def read_root():
