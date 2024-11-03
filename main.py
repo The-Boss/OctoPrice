@@ -13,7 +13,8 @@ from pydantic import BaseModel, Field
 # API settings - replace with your specific details
 OCTOPUS_API_URL = "https://api.octopus.energy/v1/products/AGILE-24-10-01/electricity-tariffs/E-1R-AGILE-24-10-01-A/standard-unit-rates/"
 threshold_high = 22.0
-threshold_medium = 15.0
+threshold_medium = 17.0
+threshold_low = 12.0
 
 # Store for the fetched data
 
@@ -49,6 +50,36 @@ def fetch_energy_data():
         print("Failed to fetch data:", e)
 
 
+def retrieve_current_data() -> dict:
+    """"""
+    time = datetime.now()
+    
+    while True:
+        if ((datetime.strptime(energy_data[-1]["valid_from"].replace("Z",""), "%Y-%m-%dT%H:%M:%S") < time) and datetime.strptime(energy_data[-1]["valid_to"].replace("Z",""), "%Y-%m-%dT%H:%M:%S") > time):
+        # Have the right prive point - return it
+            return energy_data[-1]
+        elif (datetime.strptime(energy_data[-1]["valid_to"].replace("Z",""), "%Y-%m-%dT%H:%M:%S") < time):
+            energy_data.pop()
+            print("removed value")
+        else:
+            return None # is there a better thing to return? LookupError?
+
+
+def determine_colour(price_data) -> dict:
+    """"""
+    if not price_data:
+        return None
+    else:
+        if price_data["value_exc_vat"] >= threshold_high:
+            return {"colour":"red"}
+        elif price_data["value_exc_vat"] < threshold_high and price_data["value_exc_vat"] >= threshold_medium:
+            return {"colour":"yellow"}
+        elif price_data["value_exc_vat"] < threshold_medium and price_data["value_exc_vat"] >= threshold_low:
+            return {"colour":"green"}
+        else:
+            return {"colour":"blue"}
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     fetch_energy_data()
@@ -64,24 +95,36 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/")
 async def read_root():
-    time = datetime.now()
+    price_dict = retrieve_current_data()
+    if price_dict:
+        return price_dict
+    else:
+        return None
+
+    # time = datetime.now()
     
-    while True:
-        if ((datetime.strptime(energy_data[-1]["valid_from"].replace("Z",""), "%Y-%m-%dT%H:%M:%S") < time) and datetime.strptime(energy_data[-1]["valid_to"].replace("Z",""), "%Y-%m-%dT%H:%M:%S") > time):
-        # Have the right prive point - return it
-            return energy_data[-1]
-        elif (datetime.strptime(energy_data[-1]["valid_to"].replace("Z",""), "%Y-%m-%dT%H:%M:%S") < time):
-            energy_data.pop()
-            print("removed value")
-        else:
-            return {"key":"Error"}
+    # while True:
+    #     if ((datetime.strptime(energy_data[-1]["valid_from"].replace("Z",""), "%Y-%m-%dT%H:%M:%S") < time) and datetime.strptime(energy_data[-1]["valid_to"].replace("Z",""), "%Y-%m-%dT%H:%M:%S") > time):
+    #     # Have the right prive point - return it
+    #         return energy_data[-1]
+    #     elif (datetime.strptime(energy_data[-1]["valid_to"].replace("Z",""), "%Y-%m-%dT%H:%M:%S") < time):
+    #         energy_data.pop()
+    #         print("removed value")
+    #     else:
+    #         return {"key":"Error"}
 
     # return energy_data[-1]
     # return {"colour":"blue"}
 
-@app.get("/defaultprice")
+@app.get("/colour")
 async def read_root():
-    return {"colour":"red"}
+    price_dict = retrieve_current_data()
+    if price_dict:
+        return determine_colour(price_dict)
+    else:
+        return None
+        
+
 
 
 
