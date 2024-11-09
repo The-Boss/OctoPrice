@@ -16,6 +16,8 @@ API_KEY = os.getenv("OCTO_KEY")
 # Fallback to a default value if the variable is not set
 if API_KEY is None:
     raise ValueError("API_KEY environment variable not set.")
+else:
+    print("API_KEY found")
 
 
 # API settings - replace with your specific details
