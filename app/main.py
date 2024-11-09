@@ -1,33 +1,59 @@
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Depends, status
 from datetime import datetime
 import requests
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from typing import List, Dict, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+import os
+
+# Retrieve the API key from environment variables
+API_KEY = os.getenv("OCTO_KEY")
+# API_KEY ="password"
+
+# Fallback to a default value if the variable is not set
+if API_KEY is None:
+    raise ValueError("API_KEY environment variable not set.")
 
 
 # API settings - replace with your specific details
 OCTOPUS_API_URL = "https://api.octopus.energy/v1/products/AGILE-24-10-01/electricity-tariffs/E-1R-AGILE-24-10-01-A/standard-unit-rates/"
+
 threshold_high = 22.0
 threshold_medium = 17.0
 threshold_low = 12.0
 
 
+# Define Pydantic Models
+class ThresholdUpdate(BaseModel):
+    high: float
+    medium: float
+    low: float
 
-# class PricePoint(BaseModel):
-#     value_exc_vat: float
-#     value_inc_vat: float
-#     valid_from: datetime
-#     valid_to: datetime
-#     payment_method: str | None
+class PricePoint(BaseModel):
+    value_exc_vat: float
+    value_inc_vat: float
+    valid_from: datetime
+    valid_to: datetime
+    payment_method: Optional[str] = None
 
-# class EnergyData(BaseModel):
-#     energy_data: List[PricePoint]
+class ColourResponse(BaseModel):
+    colour: str
 
-energy_data: List = []
+class EnergyData(BaseModel):
+    energy_data: List[PricePoint]
+
+# In-memory energy data
+energy_data: List[dict] = []
+
+# Dependency for API key authentication
+def api_key_auth(api_key: str):
+    if api_key != API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Could not validate credentials"
+        )
 
 
 def fetch_energy_data():
@@ -40,41 +66,48 @@ def fetch_energy_data():
         response = requests.get(OCTOPUS_API_URL, params=params)
         response.raise_for_status()
         energy_data = response.json()["results"]
-        print("success!...")
-        # print(energy_data)
-
+        print("Data fetched successfully!...")
     except requests.RequestException as e:
         print("Failed to fetch data:", e)
 
 
-def retrieve_current_data() -> dict:
-    """"""
-    time = datetime.now()
-    while True:
-        if ((datetime.strptime(energy_data[-1]["valid_from"].replace("Z",""), "%Y-%m-%dT%H:%M:%S") < time) 
-            and datetime.strptime(energy_data[-1]["valid_to"].replace("Z",""), "%Y-%m-%dT%H:%M:%S") > time):
-            # Have the right price point - return it
-            return energy_data[-1]
-        elif (datetime.strptime(energy_data[-1]["valid_to"].replace("Z",""), "%Y-%m-%dT%H:%M:%S") < time):
-            energy_data.pop()
-            print("removed value")
+def retrieve_current_data() -> Optional[dict]:
+    """Retrieve the current price point based on the current time."""
+    if not energy_data:
+        print("Energy data is empty")
+        return None
+    
+    current_time = datetime.now()
+    while energy_data:
+        last_price = energy_data[-1]
+        # Think I might need to consider the below as datetimes, not strings
+        valid_from = datetime.strptime(last_price["valid_from"].replace("Z", ""), "%Y-%m-%dT%H:%M:%S")
+        valid_to = datetime.strptime(last_price["valid_to"].replace("Z", ""), "%Y-%m-%dT%H:%M:%S")
+        
+        if valid_from <= current_time < valid_to:
+            return last_price
+        elif valid_to < current_time:
+            energy_data.pop()  # Remove outdated price points
+            print("Removed outdated value.")
         else:
-            return None # is there a better thing to return? LookupError?
+            break
+    return None
 
 
 def determine_colour(price_data) -> dict:
-    """"""
+    """Determine the color based on the price value."""
     if not price_data:
         return None
+    
+    price = price_data["value_exc_vat"]
+    if price >= threshold_high:
+        return ColourResponse(colour="red")
+    elif threshold_medium <= price < threshold_high:
+        return ColourResponse(colour="yellow")
+    elif threshold_low <= price < threshold_medium:
+        return ColourResponse(colour="green")
     else:
-        if price_data["value_exc_vat"] >= threshold_high:
-            return {"colour":"red"}
-        elif price_data["value_exc_vat"] < threshold_high and price_data["value_exc_vat"] >= threshold_medium:
-            return {"colour":"yellow"}
-        elif price_data["value_exc_vat"] < threshold_medium and price_data["value_exc_vat"] >= threshold_low:
-            return {"colour":"green"}
-        else:
-            return {"colour":"blue"}
+        return ColourResponse(colour="blue")
 
 
 @asynccontextmanager
@@ -90,24 +123,49 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-@app.get("/")
-async def read_root():
-    price_dict = retrieve_current_data()
-    if price_dict:
-        return price_dict
-    else:
-        return None
-
-@app.get("/colour")
-async def read_root():
-    price_dict = retrieve_current_data()
-    if price_dict:
-        return determine_colour(price_dict)
-    else:
-        return None
-        
+@app.get("/", response_model=Optional[PricePoint])
+async def get_current_price():
+    """Endpoint to retrieve the current price point data."""
+    price_data = retrieve_current_data()
+    if price_data:
+        return PricePoint(**price_data)
+    raise HTTPException(status_code=404, detail="No current price data available.")
 
 
+@app.get("/colour", response_model=Optional[ColourResponse])
+async def get_colour():
+    """Endpoint to retrieve the current price color based on thresholds."""
+    price_data = retrieve_current_data()
+    colour = determine_colour(price_data)
+    if colour:
+        return colour
+    raise HTTPException(status_code=404, detail="No colour data available.")        
+
+
+
+@app.get("/thresholds")
+async def get_thresholds():
+    """Endpoint to retrieve the current thresholds"""
+    global threshold_high, threshold_medium, threshold_low
+    return {"message": "Thresholds", "high": threshold_high, "medium": threshold_medium, "low": threshold_low}
+
+
+
+# Endpoint to update threshold values
+@app.put("/thresholds", dependencies=[Depends(api_key_auth)])
+async def update_thresholds(thresholds: ThresholdUpdate):
+    global threshold_high, threshold_medium, threshold_low
+    
+    if thresholds.high <= thresholds.medium or thresholds.medium <= thresholds.low:
+        raise HTTPException(
+            status_code=400, detail="Threshold values must follow high > medium > low."
+        )
+
+    threshold_high = thresholds.high
+    threshold_medium = thresholds.medium
+    threshold_low = thresholds.low
+
+    return {"message": "Thresholds updated successfully", "high": threshold_high, "medium": threshold_medium, "low": threshold_low}
 
 
 
