@@ -34,6 +34,15 @@ class ThresholdUpdate(BaseModel):
     medium: float
     low: float
 
+class StatusPing(BaseModel):
+    time: datetime
+    from_device_id: str
+
+class SupportRequest(BaseModel):
+    time: datetime
+    from_device_id: str
+    tel: str
+
 class PricePoint(BaseModel):
     value_exc_vat: float
     value_inc_vat: float
@@ -162,13 +171,19 @@ async def update_thresholds(thresholds: ThresholdUpdate):
         raise HTTPException(
             status_code=400, detail="Threshold values must follow high > medium > low."
         )
-
     threshold_high = thresholds.high
     threshold_medium = thresholds.medium
     threshold_low = thresholds.low
-
     return {"message": "Thresholds updated successfully", "high": threshold_high, "medium": threshold_medium, "low": threshold_low}
 
 
+# Endpoint to receive status pings
+@app.put("/providestatus")
+async def provide_status(status_msg: StatusPing):
+    return {"message": f"Status Received at {status_msg.time}"}
 
 
+# Endpoint to receive help calls 
+@app.put("/requesthelp")
+async def provide_status(request: SupportRequest):
+    return {"message": f"Request received at {request.time}"}
