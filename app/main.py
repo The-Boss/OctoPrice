@@ -1,8 +1,9 @@
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, Header, HTTPException, Depends, status
 from datetime import datetime
 import requests
+import re
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from typing import List, Dict, Optional
@@ -11,6 +12,7 @@ import os
 
 # Retrieve the API key from environment variables
 API_KEY = os.getenv("OCTO_KEY")
+WA_KEY = os.getenv("WA_KEY")
 # API_KEY ="password"
 
 # Fallback to a default value if the variable is not set
@@ -69,6 +71,15 @@ def api_key_auth(api_key: str):
         )
 
 
+# # Dependency for WhatsApp authentication
+# def help_key_auth(api_key: str):
+#     if api_key != WA_KEY:
+#         raise HTTPException(
+#             status_code=status.HTTP_403_FORBIDDEN, detail="Could not validate credentials"
+#         )
+
+
+
 def fetch_energy_data():
     """Gets Octo data from now through to the latest available in the future."""    
     print("fetching data...")
@@ -121,6 +132,27 @@ def determine_colour(price_data) -> dict:
         return ColourResponse(colour="green")
     else:
         return ColourResponse(colour="blue")
+
+
+def format_phone_number(phone: str) -> str:
+    """
+    Ensures the phone number is in the format '447712345678' by:
+    - Removing leading '0' and replacing '+44' with '44'
+    - Ensuring it is exactly 12 digits long (UK standard)
+    """
+    phone = phone.strip()  # Remove spaces
+
+    # If phone starts with '+44', replace with '44'
+    if phone.startswith("+44"):
+        phone = "44" + phone[3:]
+    # If phone starts with '0', remove the leading zero and add '44'
+    elif phone.startswith("0"):
+        phone = "44" + phone[1:]
+
+    # Ensure the final format is 12 digits long
+    if not re.fullmatch(r"44\d{10}", phone):
+        raise HTTPException(status_code=400, detail="Invalid phone number format. Must be in '447712345678' format.")
+    return phone
 
 
 @asynccontextmanager
@@ -187,7 +219,9 @@ async def provide_status(status_msg: StatusPing):
 
 # Endpoint to receive help calls 
 @app.put("/requesthelp") #TODO include an api key here
-async def provide_status(request: SupportRequest):
+async def provide_status(request: SupportRequest, wa_api_key: str = Header(None)):
+    if wa_api_key != WA_KEY:
+        raise HTTPException(status_code=403, detail="Invalid API key")
 
     price_data = retrieve_current_data()
     
@@ -195,13 +229,13 @@ async def provide_status(request: SupportRequest):
         price_data = "Could not retrieve price data"
 
     payload = {
-        "To": request.tel,
+        "To": format_phone_number(request.tel),
         "Price": price_data["value_exc_vat"]
     }
 
     try:
         # Make the PUT request to the external API
-        response = requests.put(WHATSAPPSENDER_API_URL, json=payload)
+        response = requests.post(WHATSAPPSENDER_API_URL, json=payload)
         response.raise_for_status()  # Raise error if the request failed
         return {"message": "Help request processed successfully", "code": response.status_code}
     except requests.RequestException as e:
