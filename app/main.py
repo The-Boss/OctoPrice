@@ -220,8 +220,8 @@ async def provide_status(status_msg: StatusPing):
 # Endpoint to receive help calls 
 @app.put("/requesthelp") #TODO include an api key here
 async def provide_status(request: SupportRequest, wa_api_key: str = Header(None)):
-    if wa_api_key != WA_KEY:
-        raise HTTPException(status_code=403, detail="Invalid API key")
+    # if wa_api_key != WA_KEY:
+    #     raise HTTPException(status_code=403, detail=f"Invalid API key: {wa_api_key}")
 
     price_data = retrieve_current_data()
     
