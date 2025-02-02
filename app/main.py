@@ -20,9 +20,11 @@ else:
     print("API_KEY found")
 
 
-# API settings - replace with your specific details
+# API URLs
 OCTOPUS_API_URL = "https://api.octopus.energy/v1/products/AGILE-24-10-01/electricity-tariffs/E-1R-AGILE-24-10-01-A/standard-unit-rates/"
+WHATSAPPSENDER_API_URL = "https://whatsappsender-2782.twil.io/WhatsappSender"
 
+# Default price thresholds
 threshold_high = 22.0
 threshold_medium = 17.0
 threshold_low = 12.0
@@ -184,6 +186,25 @@ async def provide_status(status_msg: StatusPing):
 
 
 # Endpoint to receive help calls 
-@app.put("/requesthelp")
+@app.put("/requesthelp") #TODO include an api key here
 async def provide_status(request: SupportRequest):
-    return {"message": f"Request received at {request.time}"}
+
+    price_data = retrieve_current_data()
+    
+    if not price_data:
+        price_data = "Could not retrieve price data"
+
+    payload = {
+        "To": request.tel,
+        "Price": price_data["value_exc_vat"]
+    }
+
+    try:
+        # Make the PUT request to the external API
+        response = requests.put(WHATSAPPSENDER_API_URL, json=payload)
+        response.raise_for_status()  # Raise error if the request failed
+        return {"message": "Help request processed successfully", "code": response.status_code}
+    except requests.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Failed to send help request: {str(e)}")
+
+#    return {"message": f"Request received at {request.time}"}
