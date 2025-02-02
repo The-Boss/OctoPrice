@@ -237,6 +237,7 @@ async def provide_status(request: SupportRequest, wa_api_key: str = Header(None)
         # Make the PUT request to the external API
         response = requests.post(WHATSAPPSENDER_API_URL, json=payload)
         response.raise_for_status()  # Raise error if the request failed
+        print("Successfully sent payload: ", payload)
         return {"message": "Help request processed successfully", "code": response.status_code}
     except requests.RequestException as e:
         raise HTTPException(status_code=500, detail=f"Failed to send help request: {str(e)}")
