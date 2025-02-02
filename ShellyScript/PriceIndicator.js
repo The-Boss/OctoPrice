@@ -4,7 +4,7 @@ let CONFIG = {
   helpData:{
     "time": "2024-11-10T22:02:39.640Z",
     "from_device_id": "10",
-    "tel": "+447732536335"
+    "tel": "+447700000000"
     },
   checkInterval: 1 * 60 * 1000
   };
