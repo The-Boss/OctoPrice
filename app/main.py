@@ -230,7 +230,7 @@ async def provide_status(request: SupportRequest, wa_api_key: str = Header(None)
 
     payload = {
         "To": format_phone_number(request.tel),
-        "Price": str(price_data["value_exc_vat"], " pence/kWh")
+        "Price": f"{price_data["value_exc_vat"]} pence/kWh"
     }
 
     try:
