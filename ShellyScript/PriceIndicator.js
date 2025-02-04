@@ -2,23 +2,22 @@ let CONFIG = {
   colour_endpoint:"https://octoprice.onrender.com/colour",
   help_endpoint:"https://octoprice.onrender.com/requesthelp",
   helpData:{
-    "time": "2024-11-10T22:02:39.640Z",
-    "from_device_id": "10",
-    "tel": "+447700000000"
+    "time": "2024-11-10T22:02:39.640Z", // To be removed and replaced with server-side timestamp
+    "from_device_id": "10", // Yet to be implemented
+    "tel": "+440000000000" // Needs to be UK number, starting with 44 and having a total of 12 digits
     },
-  checkInterval: 1 * 60 * 1000
+  checkInterval: 1 * 60 * 1000,
+  wa_api_key: "Not_Implemented",
   };
 
 let green = [0,100,0]; 
 let red = [100,0,0];
 let yellow  = [100,100,0];
 let blue = [0,0,100];
+let purple = [100,0,100]; 
 
 let current_colour = yellow;
 let lastPressTime = null;
-
-
-// **************
 
 let pressCount = 0;
 let pressTimer = null;
@@ -41,10 +40,8 @@ Shelly.addStatusHandler(function(status) {
           // Second press detected before timer expired -> it's a double press!
           print("Double press detected... making HTTP call");          
           requestHelp(CONFIG.helpData)
-          updateColour(blue, true);
-          //CONFIG.helpData.unix_time = result.unixtime;
+          updateColour(purple, true);
           //CONFIG.helpData.from_device_id = result.mac
-          //requestHelp(CONFIG.helpData)
 
           // Clear the single-press timer since we now have a double press
           Timer.clear(pressTimer);
@@ -54,48 +51,38 @@ Shelly.addStatusHandler(function(status) {
   }
 });
 
-// ***************
-
+// *************** Only required for Mac ID ***************8
 //function getTime() {
 //  Shelly.call("Sys.GetStatus", {}, function(result) {
 //    if (result) {
-//      CONFIG.helpData.unix_time = result.unixtime;
 //      CONFIG.helpData.from_device_id = result.mac
 //    } else {
-//      CONFIG.helpData.unix_time = 0;
 //      CONFIG.helpData.from_device_id = 0
 //    }
-//    
 //  })
 //}
 
 
-// Define a function to handle the HTTP PUT request
+// Function to handle the HTTP PUT request for Help
 function requestHelp(data) {
 Shelly.call(
   "http.request",
-  {method:"PUT", url:"https://octoprice.onrender.com/requesthelp", body: JSON.stringify(data)},
+  {method:"PUT", url:"https://octoprice.onrender.com/requesthelp", headers:{"wa_api_key": CONFIG.wa_api_key}, body: JSON.stringify(data)},
   function (result, error_code, error_message) {
     if (error_code === 0) {
       // Successful response
-      print("Error Code 0");
+      // print(result.code);
       print("Response data:", JSON.stringify(result.body));
     } else {
       // Handle errors
       print("PUT request failed with error code:", error_code);
-      if (error_code === 408) {
-        print("Error: Request timed out.");
-      } else if (error_code === 404) {
-        print("Error: Endpoint not found (404).");
-      } else {
-        print("Error message:", error_message);
-      }
+      print("Error message:", error_message);
     }
   }
 );
 }
 
-// Check the usage for "res"... just prints the colour change to the console..
+// Function to update the LED colour on the plug.
 function updateColour(colour, flag) {
  Shelly.call("PLUGUK_UI.SetConfig", {
   'id': 0,
@@ -120,12 +107,12 @@ function updateColour(colour, flag) {
 }, function(res) {
   if (res) {
     print("update colour flag: ", flag);
-    //Put colour transition in here... (if needed)
+    // Not Implemented -> Put colour transition in here... if needed
   }
 });
 }
 
-
+// Function to get the latest price colour from API and request the LED colour change.
 function getOctoData() {
 console.log("Gettting Data from: " + CONFIG.colour_endpoint);
 Shelly.call(
@@ -149,14 +136,14 @@ Shelly.call(
             print("updated to blue");
           }}
       } else {
-        updateColour(blue, false);
+        updateColour(purple, false);
         print("Error Getting Data");
       }
   },
 );
 }
 
-//watch out for async things going on... need to use callbacks or nested calls to get the sequence right...
+// Timer to re-run the getOctoData() function at a regular interval to check for updates and changes
 Timer.set(CONFIG.checkInterval, true, function () {
 getOctoData();
 });
